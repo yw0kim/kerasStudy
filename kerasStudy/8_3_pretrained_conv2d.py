@@ -133,4 +133,11 @@ def fine_tuning():
         callbacks=callbacks
     )
 
-fine_tuning()
+# fine_tuning()
+
+def fine_tuning_test():
+    model = keras.models.load_model("data/fine_tuning.keras")
+    test_loss, test_acc = model.evaluate(test_dataset)
+    print(test_acc)
+
+fine_tuning_test()
