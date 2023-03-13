@@ -2,14 +2,6 @@ from tensorflow import keras
 import os, shutil, pathlib
 from tensorflow.keras import layers
 
-conv_base = keras.applications.vgg16.VGG16(
-    weights="imagenet",
-    include_top=False,
-    input_shape=(180, 180, 3)
-)
-# print(conv_base.summary())
-
-
 new_base_dir = pathlib.Path("data/cats_vs_dogs_small")
 from tensorflow.keras.utils import image_dataset_from_directory
 
@@ -31,6 +23,12 @@ test_dataset = image_dataset_from_directory(
 
 import numpy as np
 
+conv_base = keras.applications.vgg16.VGG16(
+    weights="imagenet",
+    include_top=False,
+    input_shape=(180, 180, 3)
+)
+# print(conv_base.summary())
 
 def get_features_and_labels(dataset):
     all_features = []
@@ -49,5 +47,90 @@ def no_extension():
     print(train_features.shape)
 
     inputs = keras.Input(shape=(5, 5, 512))
+    x = layers.Flatten()(inputs)
+    x = layers.Dense(256)(x)
+    x = layers.Dropout(0.5)(x)
+    outputs = layers.Dense(1, activation="sigmoid")(x)
+    model = keras.Model(inputs, outputs)
+    model.compile(loss="binary_crossentropy", optimizer="rmsprop", metrics=["accuracy"])
 
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(
+            filepath="data/feature_extraction.keras",
+            save_best_only=True,
+            monitor="val_loss"
+        )
+    ]
+    history = model.fit(
+        train_features, train_labels,
+        epochs=20,
+        validation_data=(val_features, val_labels),
+        callbacks=callbacks
+    )
 
+# no_extension()
+
+conv_base = keras.applications.vgg16.VGG16(
+    weights="imagenet",
+    include_top=False
+)
+conv_base.trainable = False
+def with_extension():
+    data_augmentation = keras.Sequential(
+        [
+            layers.RandomFlip("horizontal"),
+            layers.RandomRotation(0.1),
+            layers.RandomZoom(0.2),
+        ]
+    )
+    inputs = keras.Input(shape=(180,180,3))
+    x = data_augmentation(inputs)
+    x = keras.applications.vgg16.preprocess_input(x)
+    x = conv_base(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(256)(x)
+    x = layers.Dropout(0.5)(x)
+    outputs = layers.Dense(1, activation="sigmoid")(x)
+    model = keras.Model(inputs, outputs)
+    model.compile(loss="binary_crossentropy", optimizer="rmsprop", metrics=["accuracy"])
+
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(
+            filepath="data/feature_extraction_with_data_augmentation.keras",
+            save_best_only=True,
+            monitor="val_loss"
+        )
+    ]
+    history = model.fit(
+        train_dataset,
+        epochs=50,
+        validation_data=validation_dataset,
+        callbacks=callbacks
+    )
+# with_extension()
+
+def fine_tuning():
+    model = keras.models.load_model("data/feature_extraction_with_data_augmentation.keras")
+    conv_base.trainable = True
+    for layer in conv_base.layers[:-4]:
+        layer.trainable = False
+
+    model.compile(loss="binary_crossentropy",
+                  optimizer=keras.optimizers.RMSprop(learning_rate=1e-5),
+                  metrics=["accuracy"])
+
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(
+            filepath="data/fine_tuning.keras",
+            save_best_only=True,
+            monitor="val_loss"
+        )
+    ]
+    history = model.fit(
+        train_dataset,
+        epochs=30,
+        validation_data=validation_dataset,
+        callbacks=callbacks
+    )
+
+fine_tuning()
